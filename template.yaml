@@ -1,0 +1,82 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Amazon Personalize filter rotatation utility that automatically creates and deletes filters using templates you provide
+
+Parameters:
+  PersonalizeDatasetGroupArn:
+    Type: String
+    Description: Dataset Group Arn to rotate filters within.
+
+  PersonalizeCurrentFilterNameTemplate:
+    Type: String
+    Description: >
+      Filter name template for the filter that should currently exist. This template is used to either match an existing filter that
+      is considered current or trigger the creation of a filter if it does not exist.
+
+  PersonalizeCurrentFilterExpressionTemplate:
+    Type: String
+    Description: >
+      Filter expression template for the filter that should currently exist. When the current filter does not exist, a filter is created
+      using this value as the template for the new filter's expression.
+
+  PersonalizeDeleteFilterMatchTemplate:
+    Type: String
+    Description: >
+      Filter match template for filter(s) that should be automatically deleted. Any existing filter(s) matching this template will be deleted.
+
+  RotationSchedule:
+    Type: String
+    Description: How often you want to rotation script to run. Can be either a cron or rate expression.
+    Default: "rate(1 hours)"
+
+Globals:
+  Function:
+    Runtime: python3.8
+    Environment:
+      Variables:
+        LOG_LEVEL: DEBUG
+        POWERTOOLS_LOGGER_LOG_EVENT: true
+        POWERTOOLS_LOGGER_SAMPLE_RATE: 0
+
+Resources:
+  AwsLambdaPowertoolsPythonLayer:
+      Type: AWS::Serverless::Application
+      Properties:
+        Location:
+          ApplicationId: arn:aws:serverlessrepo:eu-west-1:057560766410:applications/aws-lambda-powertools-python-layer
+          SemanticVersion: 1.20.2
+
+  PersonalizeFilterRotatorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Function that rotates Personalize filters based on user-defined criteria
+      Timeout: 30
+      CodeUri: src/filter_rotator_function
+      Handler: filter_rotator.lambda_handler
+      Layers:
+        - !GetAtt AwsLambdaPowertoolsPythonLayer.Outputs.LayerVersionArn
+      Policies:
+        - Statement:
+          - Effect: Allow
+            Action:
+              - personalize:ListFilters
+              - personalize:CreateFilter
+              - personalize:DeleteFilter
+            Resource: '*'
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: personalize_filter_rotator
+      Events:
+        ScheduledEvent:
+          Type: Schedule
+          Properties:
+            Description: Triggers Personalize filter rotation
+            Input: !Sub '{"datasetGroupArn": "${PersonalizeDatasetGroupArn}","currentFilterNameTemplate": "${PersonalizeCurrentFilterNameTemplate}","currentFilterExpressionTemplate": "${PersonalizeCurrentFilterExpressionTemplate}","deleteFilterMatchTemplate": "${PersonalizeDeleteFilterMatchTemplate}"}'
+            Schedule: !Ref RotationSchedule
+            Enabled: True
+
+Outputs:
+  PersonalizeFilterRotatorFunction:
+    Description: "Personalize filter rotator Function ARN"
+    Value: !GetAtt PersonalizeFilterRotatorFunction.Arn
