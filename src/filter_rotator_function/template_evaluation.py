@@ -7,6 +7,9 @@ from dateutil.parser import parse
 import re
 from typing import Dict
 
+"""
+This script includes the utilities and functions for evaluating expressions/templates.
+"""
 def _unixtime(s):
     if isinstance(s, str):
         return parse(s).timestamp()
@@ -42,6 +45,10 @@ def _start(s: str, num: int):
     return s[0:num]
 
 def eval_expression(s: str, names: Dict = None):
+    """
+    Customizes the functions and names available in
+    expression and evaluates an expression.
+    """
     functions = DEFAULT_FUNCTIONS.copy()
     functions.update(
         unixtime=_unixtime,
@@ -67,4 +74,8 @@ def eval_expression(s: str, names: Dict = None):
     return simple_eval(s, functions=functions, names=names_combined)
 
 def eval_template(s: str, names: Dict = None):
+    """
+    Processes a template that includes zero or more expressions wrapped in handlebars ("{{ }}")
+    where each embedded expression is replaced by the resolved expression.
+    """
     return re.sub(r'\{\{([^\}]*)\}\}', lambda m: str(eval_expression(m.group(1), names)), s)

@@ -28,7 +28,20 @@ Parameters:
   RotationSchedule:
     Type: String
     Description: How often you want to rotation script to run. Can be either a cron or rate expression.
-    Default: "rate(1 hours)"
+    Default: "rate(1 day)"
+
+  Timezone:
+    Type: String
+    Description: Set the timezone of the rotator function's Lambda environment to match your local timezone.
+    Default: UTC
+
+  PublishFilterEvents:
+    Type: String
+    Description: Whether to publish events to the default Amazon EventBridge bus when created filters become active and when existing filters are deleted.
+    AllowedValues:
+      - 'Yes'
+      - 'No'
+    Default: 'Yes'
 
 Globals:
   Function:
@@ -51,21 +64,29 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Description: Function that rotates Personalize filters based on user-defined criteria
-      Timeout: 30
+      Timeout: 900  # In case we have to wait for filter to become active
       CodeUri: src/filter_rotator_function
       Handler: filter_rotator.lambda_handler
       Layers:
         - !GetAtt AwsLambdaPowertoolsPythonLayer.Outputs.LayerVersionArn
       Policies:
         - Statement:
-          - Effect: Allow
+          - Sid: PersonalizePolicy
+            Effect: Allow
             Action:
               - personalize:ListFilters
               - personalize:CreateFilter
               - personalize:DeleteFilter
             Resource: '*'
+          - Sid: EventBridgePolicy
+            Effect: Allow
+            Action:
+              - events:PutEvents
+            Resource: '*'
       Environment:
         Variables:
+          PUBLISH_FILTER_EVENTS: !Ref PublishFilterEvents
+          TZ: !Ref Timezone
           POWERTOOLS_SERVICE_NAME: personalize_filter_rotator
       Events:
         ScheduledEvent:
