@@ -7,9 +7,8 @@ This project contains the source code and supporting files for deploying a serve
 - Deletes filters based on a dynamic matching expression you provide (optional)
 - Publishes events to [Amazon EventBridge](https://aws.amazon.com/eventbridge/) when filters are created or deleted (optional)
 
-## <a name='Whyisthisimportant'></a>Why is this important?
-
-Amazon Personalize filters are a great way to have your business rules applied to recommendations before they are returned to your application. They can be used to include or exclude items from being recommended for a user based on a SQL-like syntax that considers the user's interaction history, item metadata, and user metadata. For example, only recommend movies that the user has watched or favorited in the past to populate a "Watch again" widget.
+## <a name='Whatarefilters'></a>What are filters?
+Amazon Personalize filters are a great way to have business rules applied to recommendations before they are returned to your application. They can be used to include or exclude items from being recommended for a user based on a SQL-like syntax that considers the user's interaction history, item metadata, and user metadata. For example, only recommend movies that the user has watched or favorited in the past to populate a "Watch again" widget.
 
 ```
 INCLUDE ItemID WHERE Interactions.event_type IN ('watched','favorited')
@@ -27,10 +26,11 @@ You can even use dynamic filters where the filter expression values are specifie
 INCLUDE ItemID WHERE Items.genre IN ($GENRES)
 ```
 
-To use the filter above, you would pass the appropriate value(s) for the `$GENRE` variable when retrieving recommendations.
+To use the filter above, you would pass the appropriate value(s) for the `$GENRE` variable when retrieving recommendations using the [GetRecommendations API](https://docs.aws.amazon.com/personalize/latest/dg/API_RS_GetRecommendations.html).
 
 You can learn more about filters on the AWS Personalize blog [here](https://aws.amazon.com/blogs/machine-learning/introducing-recommendation-filters-in-amazon-personalize/) and [here](https://aws.amazon.com/blogs/machine-learning/amazon-personalize-now-supports-dynamic-filters-for-applying-business-rules-to-your-recommendations-on-the-fly/).
 
+## <a name='Whyisfilterrotationnecessary'></a>Why is filter rotation necessary?
 Filters are great! However, they do have some limitations. One of those limitations is being able to specify a dynamic value for a range query (i.e., `<`, `<=`, `>`, `>=`). For example, the following filter to limit recommendations to new items that were created since a rolling point in the past is **not** supported.
 
 **THIS WON'T WORK!**
@@ -45,15 +45,15 @@ The solution to this limitation is to use a filter expression with a hard-coded 
 INCLUDE ItemID WHERE Items.creation_timestamp > 1633240824
 ```
 
-However, this is not very flexible or maintainble since time marches on but your static filter expression does not. The workaround is to update your filter expression periodically to maintain a rolling window of time. Unfortunately filters cannot be updated so a new filter has to be created, your application has to transition to using the new filter, and then the previous filter can be safely deleted.
+However, this is not very flexible or maintainble since time marches on but your static filter expression does not. The workaround is to update your filter expression periodically to maintain a rolling window of time. Unfortunately filters cannot be updated so a new filter has to be created, your application has to transition to using the new filter, and only then can the previous filter can be safely deleted.
 
 The purpose of this serverless application is to make this process easier to maintain by automating the creation and deletion of filters and allowing you to provide a dynamic expression that is resolved to the appropriate hard-coded value when the new filter is created.
 
 ## <a name='Hereshowitworks'></a>Here's how it works
 
-An AWS Lambda [function](./src/filter_rotator_function/filter_rotator.py) is deployed by this application that is called on a recurring basis. You control the schedule which can be a [cron expression or a rate expression](https://docs.aws.amazon.com/lambda/latest/dg/services-cloudwatchevents-expressions.html). The function will only create a new filter if a filter does not already exist that matches the current filter name template and it will only delete existing filters that match the delete template. Therefore, it is fine to have the function run more often than necessary (i.e. if you don't have a predictable and consistent time when filters should be rotated).
+An AWS Lambda [function](./src/filter_rotator_function/filter_rotator.py) is deployed by this application that is called on a recurring basis. You control the schedule which can be a [cron or rate expression](https://docs.aws.amazon.com/lambda/latest/dg/services-cloudwatchevents-expressions.html). The function will only create a new filter if a filter does not already exist that matches the current filter name template and it will only delete existing filters that match the delete template. Therefore, it is fine to have the function run more often than necessary (i.e. if you don't have a predictable and consistent time when filters should be rotated).
 
-The key to the filter rotation function are the templates used to verify that the current template exists and if existing template(s) are eligible to delete. Let's look at some examples. You provide these template values as CloudFormation parameters when you deploy this application.
+The key to the filter rotation function is the templates used to verify that the current template exists and if existing template(s) are eligible to delete. Let's look at some examples. You provide these template values as CloudFormation parameters when you deploy this application.
 
 ### <a name="Currentfilternametemplate"></a>Current filter name template
 
@@ -150,7 +150,7 @@ To build and deploy the application for the first time, run the following in you
 
 ```bash
 sam build --use-container --cached
-sam deploy --guided --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND
+sam deploy --guided
 ```
 
 If you receive an error from the first command about not being able to download the Docker image from `public.ecr.aws`, you may need to login. Run the following command and then retry the above two commands.

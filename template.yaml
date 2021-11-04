@@ -45,7 +45,7 @@ Parameters:
 
 Globals:
   Function:
-    Runtime: python3.8
+    Runtime: python3.9
     Environment:
       Variables:
         LOG_LEVEL: DEBUG
@@ -53,30 +53,24 @@ Globals:
         POWERTOOLS_LOGGER_SAMPLE_RATE: 0
 
 Resources:
-  AwsLambdaPowertoolsPythonLayer:
-      Type: AWS::Serverless::Application
-      Properties:
-        Location:
-          ApplicationId: arn:aws:serverlessrepo:eu-west-1:057560766410:applications/aws-lambda-powertools-python-layer
-          SemanticVersion: 1.20.2
-
   PersonalizeFilterRotatorFunction:
     Type: AWS::Serverless::Function
     Properties:
       Description: Function that rotates Personalize filters based on user-defined criteria
-      Timeout: 900  # In case we have to wait for filter to become active
+      Timeout: 900  # In case we have to wait a while for filter to become active
       CodeUri: src/filter_rotator_function
       Handler: filter_rotator.lambda_handler
       Layers:
-        - !GetAtt AwsLambdaPowertoolsPythonLayer.Outputs.LayerVersionArn
+        - !Sub arn:aws:lambda:${AWS::Region}:017000801446:layer:AWSLambdaPowertoolsPython:3
       Policies:
         - Statement:
           - Sid: PersonalizePolicy
             Effect: Allow
             Action:
-              - personalize:ListFilters
               - personalize:CreateFilter
               - personalize:DeleteFilter
+              - personalize:DescribeFilter
+              - personalize:ListFilters
             Resource: '*'
           - Sid: EventBridgePolicy
             Effect: Allow

@@ -63,7 +63,7 @@ def lambda_handler(event, _):
 
                 if delete_match:
                     logger.info('Filter %s matched the delete filter template; queueing for deletion', filter['filterArn'])
-                    filters_to_delete.append(filter['filterArn'])
+                    filters_to_delete.append(filter)
 
     # Step 2: If the current filter does not exist, create it and send an event when it's active (if configured to do so).
     if not current_filter_exists:
@@ -95,6 +95,7 @@ def lambda_handler(event, _):
                     break
 
                 time.sleep(10)
+                logger.info('Waiting for new filter to become active; status is %s; %d seconds elapsed', status, int(time.time() - start_time))
 
             elapsed_time = time.time() - start_time
 
@@ -120,16 +121,17 @@ def lambda_handler(event, _):
     if len(filters_to_delete) > 0:
         logger.info('%s filters marked for deletion', len(filters_to_delete))
 
-        for filter_arn in filters_to_delete:
-            logger.info('Deleting filter %s', filter_arn)
-            personalize.delete_filter(filterArn = filter_arn)
+        for filter in filters_to_delete:
+            logger.info('Deleting filter %s', filter['filterArn'])
+            personalize.delete_filter(filterArn = filter['filterArn'])
 
             if publish_filter_events:
                 put_event(
                     detail_type='PersonalizeFilterDeleted',
                     detail = json.dumps({
                         'datasetGroupArn': dataset_group_arn,
-                        'filterName': filter['name']
+                        'filterName': filter['name'],
+                        'filterArn': filter['filterArn']
                     }),
                     resources = [ filter_arn ]
                 )
