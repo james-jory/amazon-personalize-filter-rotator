@@ -101,6 +101,19 @@ def lambda_handler(event, _):
 
             if status == "CREATE FAILED":
                 logger.error('Filter %s status is %s', filter_arn, status)
+
+                put_event(
+                    detail_type='PersonalizeFilterCreateFailed',
+                    detail = json.dumps({
+                                'datasetGroupArn': dataset_group_arn,
+                                'filterName': current_filter_name,
+                                'filterExpression': expression,
+                                'filterStatus': status,
+                                'failureReason': describe_filter_response['filter'].get('failureReason'),
+                                'waitTimeSeconds': int(elapsed_time)
+                    }),
+                    resources = [ filter_arn ]
+                )
             else:
                 # Filter status may be ACTIVE or still PENDING/IN PROGRESS (if we timed out).
                 logger.info('Filter %s status is %s', filter_arn, status)
@@ -133,5 +146,5 @@ def lambda_handler(event, _):
                         'filterName': filter['name'],
                         'filterArn': filter['filterArn']
                     }),
-                    resources = [ filter_arn ]
+                    resources = [ filter['filterArn'] ]
                 )

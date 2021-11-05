@@ -1,6 +1,6 @@
 # Amazon Personalize Filter Rotation
 
-This project contains the source code and supporting files for deploying a serverless application that provides automatic [filter](https://docs.aws.amazon.com/personalize/latest/dg/filter.html) rotation capabilities for [Amazon Personalize](https://aws.amazon.com/personalize/), an AI service from AWS that allows you to create custom ML recommenders based on your data. Highlights include:
+This project contains the source code and supporting files for deploying a serverless application that provides automatic [filter](https://docs.aws.amazon.com/personalize/latest/dg/filter.html) rotation capabilities for [Amazon Personalize](https://aws.amazon.com/personalize/), an AI service from AWS that allows you to create custom ML recommenders based on your data. Project highlights include:
 
 - Creates filters based on a dynamic filter naming template you provide
 - Builds filter expressions based on a dynamic filter expression template you provide
@@ -53,17 +53,17 @@ The purpose of this serverless application is to make this process easier to mai
 
 An AWS Lambda [function](./src/filter_rotator_function/filter_rotator.py) is deployed by this application that is called on a recurring basis. You control the schedule which can be a [cron or rate expression](https://docs.aws.amazon.com/lambda/latest/dg/services-cloudwatchevents-expressions.html). The function will only create a new filter if a filter does not already exist that matches the current filter name template and it will only delete existing filters that match the delete template. Therefore, it is fine to have the function run more often than necessary (i.e. if you don't have a predictable and consistent time when filters should be rotated).
 
-The key to the filter rotation function is the templates used to verify that the current template exists and if existing template(s) are eligible to delete. Let's look at some examples. You provide these template values as CloudFormation parameters when you deploy this application.
+The key to the filter rotation function is the templates used to verify that the current template exists and if existing template(s) are eligible to delete. Since the templates are resolved each time the function is executed, the resolved value can change over time. Let's look at some examples. You provide these template values as CloudFormation parameters when you deploy this application.
 
 ### <a name="Currentfilternametemplate"></a>Current filter name template
 
-Let's say you want to use a filter that only recommends recently created items. The `CREATION_TIMESTAMP` column in the items dataset is a convenient field to use for this. This column name is reserved and is used to support the cold item exploration feature of the `aws-user-personalization` recipe. Values must be expressed in the Unix timestamp format as `long`'s (i.e. number of seconds since the Epoch). The following expression limits items that were created in the last month (`1633240824` is the Unix timestamp from 1 month ago as of this writing).
+Let's say you want to use a filter that only recommends recently created items. The `CREATION_TIMESTAMP` column in the items dataset is a convenient field to use for this. This column name is reserved and is used to support the cold item exploration feature of the `aws-user-personalization` recipe. Values for this column must be expressed in the Unix timestamp format as `long`'s (i.e., number of seconds since the Epoch). The following filter expression limits items that were created in the last month (`1633240824` is the Unix timestamp for 1 month ago as of this writing).
 
 ```
 INCLUDE ItemID WHERE Items.creation_timestamp > 1633240824
 ```
 
-Alternatively, you can use a custom metadata column for the filter that uses a more coarse and/or human readable format but is still comparable for range queries, like YYYYMMDD.
+Alternatively, you can use a custom metadata column for the filter that uses a more coarse and/or human readable format but is still comparable for range queries, like `YYYYMMDD`.
 
 ```
 INCLUDE ItemID WHERE Items.published_date > 20211001
@@ -75,21 +75,21 @@ As noted earlier, filters cannot be updated. Therefore you can't just change the
 filter-include-recent-items-20211101
 ```
 
-Assuming we want to rotate this filter each day, the next day's filter name would be `filter-include-recent-items-20211004`, then `filter-include-recent-items-20211005`, and so on as time passes. Since there are limits on how many active filters you can have at any time, you cannot precreate filters. Instead, this application will dynamically create new filters. What is needed is a template that defines the filter name that can be resolved when the rotation script runs.
+Assuming we want to rotate this filter each day, the next day's filter name would be `filter-include-recent-items-20211004`, the next would be `filter-include-recent-items-20211005`, and so on as time passes. Since there are limits on how many active filters you can have at any time, you cannot precreate a large number of filters. Instead, this application will dynamically create new filters as needed and delete old ones when appropriate. What makes this work is the templates that you define for the filter name and expression and that they are resolved at run-time. Here is an example of a filter name template that matches the scheme described above.
 
 ```
 filter-include-recent-items-{{datetime_format(now,'%Y%m%d')}}
 ```
 
-The above filter name template will resolve and replace the expression within the `{{` and `}}` characters (handlebars or mustaches). In this case, we are taking the current time expressed as `now` and formatting it using the `%Y%m%d` date format expression. The result (as of today) is `20211102`. If the rotation function finds an existing filter with this name, a new filter does not need to be created. Otherwise, a new filter is created using `filter-include-recent-items-20211102` as the name.
+The above filter name template will resolve and replace the expression within the `{{` and `}}` characters (handlebars or mustaches) at run-time. In this case, we are taking the current time expressed as `now` and formatting it using the `%Y%m%d` date format expression. The result (as of today) is `20211102`. If the rotation function finds an existing filter with this name, a new filter does not need to be created. Otherwise, a new filter is created using `filter-include-recent-items-20211102` as the name.
 
 The `PersonalizeCurrentFilterNameTemplate` CloudFormation template parameter is how you specify your own custom filter name template.
 
-The functions and operators available to use in templates is described below.
+The functions and operators available to use in template syntax are described below.
 
 ### <a name="Currentfilterexpressiontemplate"></a>Current filter expression template
 
-When rotating and creating the new filter, we also may have to dynamically resolve the actual filter expression. The `PersonalizeCurrentFilterExpressionTemplate` CloudFormation template parameter can be used for this. Some examples.
+When rotating and creating the new filter, we also may have to dynamically resolve the actual filter expression. The `PersonalizeCurrentFilterExpressionTemplate` CloudFormation parameter can be used for this. Some examples.
 
 ```
 INCLUDE ItemID WHERE Items.CREATION_TIMESTAMP > {{int(unixtime(now - timedelta_days(30)))}}
@@ -99,23 +99,23 @@ INCLUDE ItemID WHERE Items.CREATION_TIMESTAMP > {{int(unixtime(now - timedelta_d
 INCLUDE ItemID WHERE Items.published_date > {{datetime_format(now - timedelta_days(30),'%Y%m%d')}}
 ```
 
-The above templates produce a hard-coded filter expression based on current time when they're resolved. The first produces a Unix timestamp (expressed in seconds as required by Personalize for `CREATION_TIMESTAMP`) that is 30 days ago. The second template produces an integer representing the date in YYYYMMDD format from 30 days ago.
+The above templates resolve to a hard-coded filter expression based on current time when they're resolved. The first produces a Unix timestamp (expressed in seconds as required by Personalize for `CREATION_TIMESTAMP`) that is 30 days ago. The second template produces an integer representing the date in `YYYYMMDD` format from 30 days ago.
 
 ### <a name="Deletefiltermatchtemplate"></a>Delete filter match template
 
-Finally, we need to clean up old filters after we have transitioned to a newer version of the filter. A filter name matching template can be used for this and can be written in such a way to delay the delete for some time after the new filter is created. This gives your application time to transition from the old filter to the new filter. The `PersonalizeDeleteFilterMatchTemplate` CloudFormation template parameter is where you specify the delete filter match template.
+Finally, we need to clean up old filters after we have transitioned to a newer version of the filter. Otherwise we will eventually hit a limit. A filter name matching template can be used for this and can be written in such a way to delay the deletion for some time after the new filter is created. This gives your application time to transition from the old filter to the new filter before the old filter is deleted. The `PersonalizeDeleteFilterMatchTemplate` CloudFormation template parameter is where you specify the delete filter match template.
 
-The following delete filter match template will match on filters with a filter name that starts with `filter-include-recent-items-` and has a suffix that is more than one day older than today. In other words, we have 1 day to transition to the new filter before the old filter is deleted.
+The following delete filter match template will match on filters with a filter name that start with `filter-include-recent-items-` and have a suffix that is more than one day older than today. In other words, we have 1 day to transition client applications to the new filter before the old filter is deleted. This can be customized however suits your application.
 
 ```
 starts_with(filter.name,'filter-include-recent-items-') and int(end(filter.name,8)) < int(datetime_format(now - timedelta_days(1),'%Y%m%d'))
 ```
 
-Any filters that trigger this template to resolve to `true` will be deleted. All others will be left alone. Note that all fields available in the [FilterSummary](https://docs.aws.amazon.com/personalize/latest/dg/API_FilterSummary.html) of the [ListFilters API](https://docs.aws.amazon.com/personalize/latest/dg/API_ListFilters.html) response are available to this template. For example, the template above matches on `filter.name`. Other filter summary fields such as `filter.status`, `filter.creationDateTime`, and `filter.lastUpdatedDateTime` can also be inspected in the template.
+Any filters that trigger this template to resolve to `true` will be deleted. All others will be left alone. Note that all fields available in the [FilterSummary](https://docs.aws.amazon.com/personalize/latest/dg/API_FilterSummary.html) of the [ListFilters API](https://docs.aws.amazon.com/personalize/latest/dg/API_ListFilters.html) response are available to this template. For example, the template above matches on `filter.name`. Other filter summary fields such as `filter.status`, `filter.creationDateTime`, and `filter.lastUpdatedDateTime` can also be inspected in the template's logic.
 
 ## <a name='Filterevents'></a>Filter events
 
-If you'd like to synchronize your application's configuration or be notified when a filter is created or deleted, you can optionally configure the rotator function to publish events to [Amazon EventBridge](https://aws.amazon.com/eventbridge/). When events are enabled, there are two event detail types published by the rotator function: `PersonalizeFilterCreated` and `PersonalizeFilterDeleted`. Both have an event `Source` of `personalize.filter.rotator` and include details on the filter created or deleted. This allows you to setup EventBridge rules to process events as you please. For example, when a new filter is created, you can receive the `PersonalizeFilterCreated` event in a Lambda function to update your application's configuration to switch to using the new filter.
+If you'd like to synchronize your application's configuration or be notified when a filter is created or deleted, you can optionally configure the rotator function to publish events to [Amazon EventBridge](https://aws.amazon.com/eventbridge/). When events are enabled, there are three event detail types published by the rotator function: `PersonalizeFilterCreated`, `PersonalizeFilterCreateFailed`, and `PersonalizeFilterDeleted`. Each has an event `Source` of `personalize.filter.rotator` and includes details on the filter created or deleted. This allows you to setup EventBridge rules to process events as you please. For example, when a new filter is created, you can process the `PersonalizeFilterCreated` event in a Lambda function to update your application's configuration to switch to using the new filter in inference calls.
 ## <a name='Filtertemplatesyntax'></a>Filter template syntax
 
 The [Simple Eval](https://github.com/danthedeckie/simpleeval) library is used as the foundation of for the template syntax. It provides a safer and more sandboxed alternative than using Python's [eval](https://docs.python.org/3/library/functions.html#eval) function. Check the Simple Eval library documentation for details on the functions available and examples.
@@ -170,7 +170,7 @@ The first command will build the source of the application. The second command w
 | Parameter PersonalizeCurrentFilterExpressionTemplate | Template to use when building the filter expression when creating the current filter. | |
 | Parameter PersonalizeDeleteFilterMatchTemplate (optional) | Template to use to match existing filters that should be deleted. | |
 | Parameter RotationSchedule | Cron or rate expression to control how often the rotation function is called. | `rate(1 day)` |
-| Parameter Timezone | Set the timezone of the rotator function's Lambda environment to match your own. | |
+| Parameter Timezone | Set the timezone of the rotator function's Lambda environment to match your own. | `UTC` |
 | Parameter PublishFilterEvents | Whether to publish events to the default EventBridge bus when filters are created and deleted. | `Yes` |
 | Confirm changes before deploy | If set to yes, any CloudFormation change sets will be shown to you before execution for manual review. If set to no, the AWS SAM CLI will automatically deploy application changes. | |
 | Allow SAM CLI IAM role creation | Since this application creates IAM roles to allow the Lambda functions to access AWS services, this setting must be `Yes`. | |

@@ -71,12 +71,12 @@ Resources:
               - personalize:DeleteFilter
               - personalize:DescribeFilter
               - personalize:ListFilters
-            Resource: '*'
+            Resource: !Sub 'arn:aws:personalize:${AWS::Region}:${AWS::AccountId}:*'
           - Sid: EventBridgePolicy
             Effect: Allow
             Action:
               - events:PutEvents
-            Resource: '*'
+            Resource: !Sub 'arn:aws:events:${AWS::Region}:${AWS::AccountId}:event-bus/default'
       Environment:
         Variables:
           PUBLISH_FILTER_EVENTS: !Ref PublishFilterEvents
