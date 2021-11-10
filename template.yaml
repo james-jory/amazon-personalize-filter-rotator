@@ -48,7 +48,7 @@ Globals:
     Runtime: python3.9
     Environment:
       Variables:
-        LOG_LEVEL: DEBUG
+        LOG_LEVEL: INFO
         POWERTOOLS_LOGGER_LOG_EVENT: true
         POWERTOOLS_LOGGER_SAMPLE_RATE: 0
 

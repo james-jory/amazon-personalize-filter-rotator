@@ -188,6 +188,25 @@ aws cloudformation delete-stack --stack-name personalize-filter-rotator
 
 Alternatively, you can delete the stack in CloudFormation in the AWS console.
 
+## <a name='FAQs'></a>FAQs
+
+***Q: How can I change the frequency that the rotator script runs once this solution is deployed?***
+
+***A:*** Two options here. Either redeploy this solution with a different frequency. A change set will be created that only updates the EventBridge rule with the new frequency. Otherwise, you can edit the EventBridge rule created by this solution directly in your AWS account.
+
+***Q: How do I use this solution to rotate multiple filters with different templates and different update frequencies?***
+
+***A:*** Once you deploy this solution, you can create additional EventBridge rules that call the rotator function with different input values. For the rule target, select the rotator function and specify an input value that is constant JSON in the following format:
+
+```javascript
+{
+    "datasetGroupArn": "[INSERT_PERSONALIZE_DATASET_GROUP_ARN]",
+    "currentFilterNameTemplate": "[INSERT_CURRENT_FILTER_NAME_TEMPLATE]",
+    "currentFilterExpressionTemplate": "[INSERT_CURRENT_FILTER_EXPRESSION_TEMPLATE]",
+    "deleteFilterMatchTemplate": "[INSERT_DELETE_FILTER_MATCH_TEMPLATE]"
+}
+```
+
 ## <a name='Reportingissues'></a>Reporting issues
 
 If you encounter a bug, please create a new issue with as much detail as possible and steps for reproducing the bug. Similarly, if you have an idea for an improvement, please add an issue as well. Pull requests are also welcome! See the [Contributing Guidelines](./CONTRIBUTING.md) for more details.
